@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2ce1448c-0a0d-425f-8820-44ccc5f13c8b" name="Changes" comment="add some notebooks">
-      <change beforePath="$PROJECT_DIR$/notebooks/03_data_analysis_and_Imbalance_check.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/notebooks/03_data_analysis_and_Imbalance_check.ipynb" afterDir="false" />
-    </list>
+    <list default="true" id="2ce1448c-0a0d-425f-8820-44ccc5f13c8b" name="Changes" comment="change name" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -83,7 +81,7 @@
       <updated>1752843197199</updated>
       <workItem from="1752843198342" duration="1974000" />
       <workItem from="1752927683495" duration="12103000" />
-      <workItem from="1752949341896" duration="5063000" />
+      <workItem from="1752949341896" duration="5892000" />
     </task>
     <task id="LOCAL-00001" summary="first commit">
       <option name="closed" value="true" />
@@ -125,7 +123,23 @@
       <option name="project" value="LOCAL" />
       <updated>1752959050378</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="change 03_data_analysis_and_Imbalance_check.ipynb">
+      <option name="closed" value="true" />
+      <created>1752959333732</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1752959333732</updated>
+    </task>
+    <task id="LOCAL-00007" summary="change name">
+      <option name="closed" value="true" />
+      <created>1752959843887</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1752959843887</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -137,7 +151,9 @@
     <MESSAGE value="check imbalance and correct the data" />
     <MESSAGE value="edit super_regions end imbalance files" />
     <MESSAGE value="add some notebooks" />
-    <option name="LAST_COMMIT_MESSAGE" value="add some notebooks" />
+    <MESSAGE value="change 03_data_analysis_and_Imbalance_check.ipynb" />
+    <MESSAGE value="change name" />
+    <option name="LAST_COMMIT_MESSAGE" value="change name" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/GeoMind$01_add_super_regions.coverage" NAME="01_add_super_regions Coverage Results" MODIFIED="1752932161720" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/data_processing" />
