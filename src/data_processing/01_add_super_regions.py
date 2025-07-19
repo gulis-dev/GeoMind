@@ -55,7 +55,6 @@ def add_contry_code(metadata):
 
     metadata['countryCode'] = country_list
 
-    metadata['countryCode'].fillna("NA")
     return metadata
 
 def add_region(metadata):

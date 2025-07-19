@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 
 
-metadata = pd.read_csv("../../data/metadata_final.csv")
+metadata = pd.read_csv("../../data/metadata_final.csv", keep_default_na=False) # because NA values in 'countryCode' column is treated as NaN
 
 def plot_region_distribution(metadata):
     plt.figure(figsize=(20, 10), dpi=300)
@@ -99,8 +99,6 @@ def plot_region_distribution(metadata):
         'Africa', 'Arabia', 'Rare Regions'
     ], loc='upper left')
 
-    # plt.scatter(lon, lat, s=2, color='red', alpha=0.3, transform=ccrs.PlateCarree())
-    # plt.savefig('../../data/points_on_world_map.png', bbox_inches='tight', dpi=300)
     plt.show()
 
 
@@ -110,7 +108,7 @@ def plot_rare_regions(metadata):
     ax.stock_img()
     ax.coastlines()
 
-    rare_regions = metadata[metadata["countryCode"].isnull()]
+    rare_regions = metadata[metadata['superRegion'] == 'Rare Regions']
     lat_rare_regions = rare_regions['latitude']
     lon_rare_regions = rare_regions['longitude']
     plt.scatter(lon_rare_regions, lat_rare_regions, s=20, color='blue', alpha=1, transform=ccrs.PlateCarree())
@@ -119,8 +117,8 @@ def plot_rare_regions(metadata):
 
 if __name__ == "__main__":
     print(metadata['superRegion'].value_counts())
-    # plot_region_distribution(metadata)
-    plot_rare_regions(metadata)
+    plot_region_distribution(metadata)
+    # plot_rare_regions(metadata)
     print(metadata[metadata['superRegion'] == 'Rare Regions']["countryCode"].value_counts())
     print(metadata[metadata["countryCode"].isnull()]["countryCode"])
 
