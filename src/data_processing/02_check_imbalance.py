@@ -69,7 +69,7 @@ def plot_region_distribution(metadata):
     russia_cyrillic = metadata[metadata['superRegion'] == 'Russia & Cyrillic']
     lat_russia_cyrillic = russia_cyrillic['latitude']
     lon_russia_cyrillic = russia_cyrillic['longitude']
-    plt.scatter(lon_russia_cyrillic, lat_russia_cyrillic, s=2, color='deeppink', alpha=0.3,
+    plt.scatter(lon_russia_cyrillic, lat_russia_cyrillic, s=2, color='black', alpha=0.3,
                 transform=ccrs.PlateCarree())
 
     # Africa
@@ -121,4 +121,34 @@ if __name__ == "__main__":
     # plot_rare_regions(metadata)
     print(metadata[metadata['superRegion'] == 'Rare Regions']["countryCode"].value_counts())
     print(metadata[metadata["countryCode"].isnull()]["countryCode"])
+
+    usa = metadata[metadata['superRegion'] == "North America"]
+    south_america = metadata[metadata['superRegion'] == "Latin America"]
+    europe = metadata[
+        (metadata['superRegion'] == "Western & Northern Europe") |
+        (metadata['superRegion'] == "Southern Europe") |
+        (metadata['superRegion'] == "Eastern Europe & Balkans")
+        ]
+    asia = metadata[
+        (metadata['superRegion'] == "East Asia") |
+        (metadata['superRegion'] == "Southeast Asia") |
+        (metadata['superRegion'] == "South Asia")
+        ]
+    africa = metadata[
+        (metadata['superRegion'] == "Africa") |
+        (metadata['superRegion'] == "Arabia")
+        ]
+    oceania = metadata[metadata['superRegion'] == "Oceania"]
+    russia = metadata[metadata['superRegion'] == "Russia & Cyrillic"]
+
+    rare_regions = metadata[metadata['superRegion'] == "Rare Regions"]
+    print(f"North America: {len(usa)}")
+    print(f"South America: {len(south_america)}")
+    print(f"Europe: {len(europe)}")
+    print(f"Asia: {len(asia)}")
+    print(f"Africa: {len(africa)}")
+    print(f"Oceania: {len(oceania)}")
+    print(f"Russia & Cyrillic: {len(russia)}")
+    print(f"Rare Regions: {len(rare_regions)}")
+    print(f"Total: {len(metadata)}")
 
