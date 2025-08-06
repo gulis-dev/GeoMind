@@ -4,37 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="2ce1448c-0a0d-425f-8820-44ccc5f13c8b" name="Changes" comment="add notebook about train direction">
+    <list default="true" id="2ce1448c-0a0d-425f-8820-44ccc5f13c8b" name="Changes" comment="train 2 versions of experts">
       <change afterPath="$PROJECT_DIR$/notebooks/05_train_experts.ipynb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_0.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_1.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_10.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_11.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_12.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_2.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_3.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_4.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_5.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_6.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_7.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_8.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v1/expert_regressor_9.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_0.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_1.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_10.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_11.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_12.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_2.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_3.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_4.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_5.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_6.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_7.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_8.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/saved_models/experts/v2/expert_regressor_9.pth" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/training/train_experts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/GeoMind.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/GeoMind.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <list id="a269feec-f908-4e23-8239-00246097f07b" name="Changes by PIOTR" comment="" />
@@ -134,7 +105,7 @@
       <workItem from="1754033833102" duration="318000" />
       <workItem from="1754370634490" duration="4536000" />
       <workItem from="1754396912456" duration="4684000" />
-      <workItem from="1754401686954" duration="24363000" />
+      <workItem from="1754401686954" duration="26426000" />
     </task>
     <task id="LOCAL-00001" summary="first commit">
       <option name="closed" value="true" />
@@ -248,7 +219,15 @@
       <option name="project" value="LOCAL" />
       <updated>1754374433284</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="train 2 versions of experts">
+      <option name="closed" value="true" />
+      <created>1754475953011</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1754475953011</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -268,18 +247,8 @@
     <MESSAGE value="create director and train it" />
     <MESSAGE value="add some file which I forgot" />
     <MESSAGE value="add notebook about train direction" />
-    <option name="LAST_COMMIT_MESSAGE" value="add notebook about train direction" />
-  </component>
-  <component name="XDebuggerManager">
-    <breakpoint-manager>
-      <breakpoints>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/training/train_experts.py</url>
-          <line>114</line>
-          <option name="timeStamp" value="2" />
-        </line-breakpoint>
-      </breakpoints>
-    </breakpoint-manager>
+    <MESSAGE value="train 2 versions of experts" />
+    <option name="LAST_COMMIT_MESSAGE" value="train 2 versions of experts" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/GeoMind$01_add_super_regions.coverage" NAME="01_add_super_regions Coverage Results" MODIFIED="1753031031241" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src/data_processing" />
