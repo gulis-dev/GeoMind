@@ -2,35 +2,31 @@ import os
 import pandas as pd
 from PIL import Image, UnidentifiedImageError
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, WeightedRandomSampler
 from torchvision import transforms
-from efficientnet_pytorch import EfficientNet
+from timm import create_model
 from torch import nn, optim
+import numpy as np
 import multiprocessing
 from tqdm import tqdm
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
 
 DATA_DIR = '../../data/'
 IMAGES_DIR = '../../data/raw/images'
 METADATA_CSV = os.path.join(DATA_DIR, 'metadata_final.csv')
 BATCH_SIZE = 32
-NUM_EPOCHS = 5
+NUM_EPOCHS = 30
 NUM_WORKERS = 2
-IMAGE_SIZE = (320, 240)
+IMAGE_SIZE = 300
 NUM_CLASSES = 13
-MODEL_SAVE_PATH = '../../saved_models/director/efficientnet_b0_director_v2.pth'
+MODEL_SAVE_PATH = '../../saved_models/director/efficientnet_b3_director_v1.pth'
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 VALID_RATIO = 0.1
 SEED = 42
+EARLY_STOPPING_PATIENCE = 10
 
 def validate_csv(csv_path, img_dir, num_classes):
-    """
-    Validates the CSV metadata and checks if image files exist.
-
-    Args:
-        csv_path (str): Path to the CSV file.
-        img_dir (str): Directory containing image files.
-        num_classes (int): Number of region classes.
-    """
     df = pd.read_csv(csv_path)
     errors = []
     if 'filename' not in df.columns or 'region_id' not in df.columns:
@@ -54,9 +50,6 @@ def validate_csv(csv_path, img_dir, num_classes):
         print("CSV and files look correct.")
 
 class StreetViewDataset(Dataset):
-    """
-    Custom Dataset for loading street view images and labels from a CSV file.
-    """
     def __init__(self, csv_file, images_dir, transform=None):
         self.data = pd.read_csv(csv_file)
         self.images_dir = images_dir
@@ -73,104 +66,104 @@ class StreetViewDataset(Dataset):
             image = Image.open(img_path).convert('RGB')
         except (FileNotFoundError, UnidentifiedImageError) as e:
             print(f"[WARNING] Could not load {img_name}: {e}. Returning black image.")
-            image = Image.new('RGB', IMAGE_SIZE, (0, 0, 0))
+            image = Image.new('RGB', (IMAGE_SIZE, IMAGE_SIZE), (0, 0, 0))
         label = int(row['region_id'])
         if self.transform:
             image = self.transform(image)
         return image, label
 
-def train_epoch(model, loader, criterion, optimizer, device):
-    """
-    Trains the model for one epoch.
-
-    Args:
-        model: PyTorch model.
-        loader: DataLoader for training data.
-        criterion: Loss function.
-        optimizer: Optimizer.
-        device: Device to run computation on.
-
-    Returns:
-        avg_loss (float): Average loss for the epoch.
-        accuracy (float): Accuracy for the epoch.
-    """
+def train_epoch(model, loader, criterion, optimizer, device, mixup_fn=None):
     model.train()
     running_loss = 0.0
     correct = 0
     total = 0
-    with tqdm(loader, desc="Training", unit="batch") as pbar:
-        for images, labels in pbar:
-            images, labels = images.to(device), labels.to(device)
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item() * images.size(0)
-            _, predicted = torch.max(outputs, 1)
+    for images, labels in tqdm(loader, desc="Training", unit="batch"):
+        images, labels = images.to(device), labels.to(device)
+        if mixup_fn is not None:
+            images, labels = mixup_fn(images, labels)
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item() * images.size(0)
+        _, predicted = torch.max(outputs, 1)
+
+        if mixup_fn is None:
             correct += (predicted == labels).sum().item()
             total += labels.size(0)
-            avg_loss = running_loss / total if total > 0 else 0
-            accuracy = correct / total if total > 0 else 0
-            pbar.set_postfix({"loss": f"{avg_loss:.4f}", "acc": f"{accuracy:.4f}"})
-    avg_loss = running_loss / total if total > 0 else 0
-    accuracy = correct / total if total > 0 else 0
+        else:
+            total += images.size(0)
+        avg_loss = running_loss / total if total > 0 else 0
+        accuracy = correct / total if total > 0 else 0
     return avg_loss, accuracy
 
-def eval_epoch(model, loader, criterion, device):
-    """
-    Evaluates the model for one epoch.
-
-    Args:
-        model: PyTorch model.
-        loader: DataLoader for validation data.
-        criterion: Loss function.
-        device: Device to run computation on.
-
-    Returns:
-        avg_loss (float): Average validation loss.
-        accuracy (float): Validation accuracy.
-    """
+def eval_epoch(model, loader, criterion, device, return_preds=False):
     model.eval()
     running_loss = 0.0
     correct = 0
     total = 0
+    all_labels = []
+    all_preds = []
     with torch.no_grad():
-        with tqdm(loader, desc="Validation", unit="batch") as pbar:
-            for images, labels in pbar:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
-                loss = criterion(outputs, labels)
-                running_loss += loss.item() * images.size(0)
-                _, predicted = torch.max(outputs, 1)
-                correct += (predicted == labels).sum().item()
-                total += labels.size(0)
-                avg_loss = running_loss / total if total > 0 else 0
-                accuracy = correct / total if total > 0 else 0
-                pbar.set_postfix({"loss": f"{avg_loss:.4f}", "acc": f"{accuracy:.4f}"})
+        for images, labels in tqdm(loader, desc="Validation", unit="batch"):
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            running_loss += loss.item() * images.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+            all_labels.append(labels.cpu().numpy())
+            all_preds.append(predicted.cpu().numpy())
     avg_loss = running_loss / total if total > 0 else 0
     accuracy = correct / total if total > 0 else 0
-    return avg_loss, accuracy
+    if return_preds:
+        return avg_loss, accuracy, np.concatenate(all_labels), np.concatenate(all_preds)
+    else:
+        return avg_loss, accuracy
+
+def plot_confusion_matrix(labels, preds, num_classes, save_path=None):
+    cm = confusion_matrix(labels, preds, labels=np.arange(num_classes))
+    plt.figure(figsize=(10, 8))
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title("Confusion Matrix")
+    plt.colorbar()
+    tick_marks = np.arange(num_classes)
+    plt.xticks(tick_marks, tick_marks, rotation=45)
+    plt.yticks(tick_marks, tick_marks)
+    thresh = cm.max() / 2.
+    for i in range(num_classes):
+        for j in range(num_classes):
+            plt.text(j, i, format(cm[i, j], 'd'),
+                     ha="center", va="center",
+                     color="white" if cm[i, j] > thresh else "black")
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path)
+    plt.show()
 
 def main():
-    """
-    Main function to run the training and validation pipeline.
-    """
     torch.manual_seed(SEED)
     validate_csv(METADATA_CSV, IMAGES_DIR, NUM_CLASSES)
 
+
     train_transforms = transforms.Compose([
-        transforms.Resize(IMAGE_SIZE),
+        transforms.RandomResizedCrop(IMAGE_SIZE, scale=(0.6, 1.0), ratio=(0.75, 1.33)),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-        transforms.RandomRotation(15),
+        transforms.RandomVerticalFlip(p=0.2),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.12),
+        transforms.RandomAffine(degrees=25, translate=(0.1, 0.1), scale=(0.85, 1.15)),
+        transforms.RandomGrayscale(p=0.10),
+        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-
     valid_transforms = transforms.Compose([
-        transforms.Resize(IMAGE_SIZE),
+        transforms.Resize(IMAGE_SIZE + 32),
+        transforms.CenterCrop(IMAGE_SIZE),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
@@ -189,33 +182,73 @@ def main():
     train_subset.dataset.transform = train_transforms
     valid_subset.dataset.transform = valid_transforms
 
+
+    train_indices = train_subset.indices
+    train_labels = [full_dataset.data.iloc[i]['region_id'] for i in train_indices]
+    class_sample_count = np.array([(np.array(train_labels) == t).sum() for t in range(NUM_CLASSES)])
+
+    weight = 1.0 / np.log1p(class_sample_count + 1)
+    samples_weight = np.array([weight[int(t)] for t in train_labels])
+    samples_weight = torch.from_numpy(samples_weight)
+    sampler = WeightedRandomSampler(samples_weight, len(samples_weight), replacement=True)
+    class_weights = torch.FloatTensor(weight)
+
     print("Preparing DataLoaders...")
-    train_loader = DataLoader(train_subset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+    train_loader = DataLoader(train_subset, batch_size=BATCH_SIZE, sampler=sampler, num_workers=NUM_WORKERS, pin_memory=True)
     valid_loader = DataLoader(valid_subset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
     print(f"Train samples: {len(train_subset)} | Valid samples: {len(valid_subset)} | Classes: {NUM_CLASSES}")
     print(f"Device: {DEVICE}")
 
-    print("Loading EfficientNet...")
-    model = EfficientNet.from_pretrained('efficientnet-b0', num_classes=NUM_CLASSES)
+    print("Loading EfficientNet-B3...")
+    model = create_model('efficientnet_b3', pretrained=True, num_classes=NUM_CLASSES)
     for param in model.parameters():
         param.requires_grad = True
     model = model.to(DEVICE)
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001, weight_decay=1e-4)
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights.to(DEVICE), label_smoothing=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=0.0003, weight_decay=1e-4)
+
+
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=1e-5)
+
+    best_val_loss = float('inf')
+    best_val_acc = 0
+    best_model_state = None
+    patience_counter = 0
 
     for epoch in range(NUM_EPOCHS):
-        print(f"\n=== Epoch {epoch+1}/{NUM_EPOCHS} ===")
+        print(f"\n=== Epoch {epoch + 1}/{NUM_EPOCHS} ===")
         train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, DEVICE)
-        val_loss, val_acc = eval_epoch(model, valid_loader, criterion, DEVICE)
-        print(f"Epoch {epoch+1}/{NUM_EPOCHS} | "
+        val_loss, val_acc, val_labels, val_preds = eval_epoch(model, valid_loader, criterion, DEVICE, return_preds=True)
+        scheduler.step()
+        print(f"Epoch {epoch + 1}/{NUM_EPOCHS} | "
               f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | "
               f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
-    os.makedirs(os.path.dirname(MODEL_SAVE_PATH), exist_ok=True)
-    torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print(f"Model saved to {MODEL_SAVE_PATH}")
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_val_acc = val_acc
+            best_model_state = model.state_dict()
+            patience_counter = 0
+            torch.save(model.state_dict(), MODEL_SAVE_PATH)
+            print(f"[Checkpoint] Model saved to {MODEL_SAVE_PATH}")
+        else:
+            patience_counter += 1
+            print(f"No improvement. Patience: {patience_counter}/{EARLY_STOPPING_PATIENCE}")
+
+        if patience_counter >= EARLY_STOPPING_PATIENCE:
+            print("Early stopping triggered!")
+            break
+
+    print(f"Best validation loss: {best_val_loss:.4f}, acc: {best_val_acc:.4f}")
+
+
+    print("\n=== Error analysis on validation set ===")
+    print(classification_report(val_labels, val_preds, digits=4))
+    plot_confusion_matrix(val_labels, val_preds, NUM_CLASSES, save_path="confusion_matrix.png")
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
