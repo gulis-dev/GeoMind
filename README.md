@@ -251,7 +251,7 @@ This project is licensed under the MIT License.
 
 ```bash
 # Install
-git clone https://github.com/<your-user-or-org>/GeoMind.git
+git clone https://github.com/gulis-dev/GeoMind.git
 cd GeoMind
 pip install -r requirements.txt
 
