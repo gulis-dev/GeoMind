@@ -8,8 +8,10 @@
 ### - Oskar Andrukiewicz (gulis-dev)
 ### - Piotr Kaptur (piotr-kaptur)
 
-IMPORTANT NOTE! 
-We created it together in Pycharma using the collaboration feature, so only gulis-dev committed
+> IMPORTANT NOTE! We created it together in Pycharma using the collaboration feature, so only gulis-dev committed
+
+
+---
 
 ## Notebooks Overview (Quick Access)
 
