@@ -5,8 +5,8 @@
 ---
 
 ## Created by:
-### - Oskar Andrukiewicz (gulis-dev)
-### - Piotr Kaptur (piotr-kaptur)
+- [Oskar Andrukiewicz (@gulis-dev)](https://github.com/gulis-dev)
+- [Piotr Kaptur (@piotr-kaptur)](https://github.com/piotr-kaptur)
 
 > IMPORTANT NOTE! We created it together in Pycharma using the collaboration feature, so only gulis-dev committed
 
