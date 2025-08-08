@@ -1,332 +1,275 @@
-# GeoMind – Global Image Geolocation (Director + Experts)
+# GeoMind – GeoGuessr AI (Director + Experts)
 
-A two-stage deep learning system for approximate geolocation of street‑level (or similar) images:
-1. Director – multi-class classifier (13 broad world regions).
-2. Region Expert – per‑region regressor producing normalized (lat, lon) which are then denormalized into real geographic coordinates.
+> Two‑stage deep learning pipeline for predicting an image’s approximate geographic location: (1) Region classification (Director) → (2) Region‑conditioned coordinate regression (Experts).
+
+---
+
+## Created by:
+### - Oskar Andrukiewicz (gulis-dev)
+### - Piotr Kaptur (piotr-kaptur)
+
+IMPORTANT NOTE! 
+We created it together in Pycharma using the collaboration feature, so only gulis-dev committed
+
+## Notebooks Overview (Quick Access)
+
+| No | Notebook | Link | Purpose (Summary) |
+|----|----------|------|-------------------|
+| 01 | Data Collecting | [`notebooks/01_Data_Collecting.ipynb`](notebooks/01_Data_Collecting.ipynb) | Notes / scaffold for sourcing raw imagery & metadata |
+| 02 | Data Preprocessing | [`notebooks/02_Data_Preprocessing.ipynb`](notebooks/02_Data_Preprocessing.ipynb) | Cleaning & preparing tabular metadata before modeling |
+| 03 | Data Analysis & Imbalance Check | [`notebooks/03_data_analysis_and_Imbalance_check.ipynb`](notebooks/03_data_analysis_and_Imbalance_check.ipynb) | Exploratory analysis: class distribution, imbalance, visual stats (large outputs) |
+| 04 | Director Training (earlier version) | [`notebooks/04_train_director.ipynb`](notebooks/04_train_director.ipynb) | Initial Director model training experiments |
+| 05 | Experts Training | [`notebooks/05_train_experts.ipynb`](notebooks/05_train_experts.ipynb) | Per‑region regression (lat/lon normalization & training loops) |
+| 06 | Inference Overview | [`notebooks/06_inference_overview.ipynb`](notebooks/06_inference_overview.ipynb) | End‑to‑end inference documentation |
+| 07 | Director v3 Training | [`notebooks/07_director_v3_training.ipynb`](notebooks/07_director_v3_training.ipynb) | Improved Director: augmentation, class balancing, early stopping |
+
+If you are browsing on GitHub and large notebooks (e.g. #03) load slowly, consider cloning and opening locally, or clearing heavy cell outputs before new commits.
 
 ---
 
 ## Table of Contents
 - [Project Overview](#project-overview)
-- [Key Features](#key-features)
+- [Core Motivation](#core-motivation)
 - [Architecture](#architecture)
 - [Regions & Coordinate Normalization](#regions--coordinate-normalization)
-- [Data](#data)
-- [Training](#training)
-  - [Director v3](#director-v3)
-  - [Experts (Regressors)](#experts-regressors)
-- [Inference](#inference)
+- [Data Pipeline](#data-pipeline)
+- [Modeling](#modeling)
+  - [Director (Classification)](#director-classification)
+  - [Experts (Conditional Regression)](#experts-conditional-regression)
+- [Training Setup](#training-setup)
+- [Results (Director v3)](#results-director-v3)
+- [Inference Workflow](#inference-workflow)
 - [Repository Structure](#repository-structure)
-- [Results & Metrics](#results--metrics)
-  - [Classification Report](#classification-report)
-  - [Confusion Matrix](#confusion-matrix)
-- [How to Run](#how-to-run)
-  - [Requirements](#requirements)
-  - [Installation](#installation)
-  - [Example Commands](#example-commands)
-- [Roadmap / Potential Improvements](#roadmap--potential-improvements)
-- [FAQ](#faq)
 - [License](#license)
+- [Citation (Optional)](#citation-optional)
 
 ---
 
 ## Project Overview
 
-GeoMind tackles the problem of predicting an image’s approximate geographic location from visual cues.  
-Instead of regressing latitude/longitude directly (highly multi‑modal), we:
-1. Classify the image into one of 13 macro regions (Director).
-2. Run a region‑specific regression model (Expert) constrained to that region’s bounding box.
+GeoMind localizes an image approximately on the globe. Instead of regressing latitude & longitude directly (highly multimodal / discontinuous), it divides the task:
 
-This decomposition improves stability and reduces the search space.
+1. Director: classify the image into one of 13 macro geographic regions.
+2. Region Expert: a dedicated regression model (one per region) outputs normalized (lat, lon) which are denormalized using that region’s bounding box.
+
+This cascaded approach reduces ambiguity and improves stability vs. monolithic global regression.
 
 ---
 
-## Key Features
+## Core Motivation
 
-- Two-stage pipeline (global classification + conditional regression).
-- EfficientNet‑B0 backbone (easily swappable).
-- Rich visual augmentation set.
-- Class imbalance mitigation (WeightedRandomSampler + per‑class loss weights).
-- Early stopping + ReduceLROnPlateau scheduler.
-- Error analysis: classification report & confusion matrix.
-- Region-normalized coordinate regression (Sigmoid outputs mapped to geographic ranges).
-- Haversine distance evaluation + Google Maps links for qualitative inspection.
+- Global coordinate regression is non-convex and multi-peaked (coastal roads vs. inland desert look similar).
+- Restricting the regression domain (after region classification) allows Experts to specialize.
+- Enables modular improvement: swap backbone for Director or retrain a weak Expert independently.
 
 ---
 
 ## Architecture
 
 ```
-┌──────────┐        image        ┌────────────────┐    region_id
-│  Image   │  ─────────────────▶ │   Director     │ ───────────┐
-└──────────┘                     │ (13 classes)   │            │
-                                 └────────────────┘            ▼
-                                             ┌────────────────────────┐
-                                             │  Region Expert (k)     │
-                                             │  (lat/lon regression)  │
-                                             └────────────────────────┘
-                                                        │  (norm [0,1]^2)
-                                                        ▼
-                                            Denormalize → (latitude, longitude)
+Image
+  │
+  ▼
+┌────────────────┐
+│   Director      │  EfficientNet-B0 (13-way softmax)
+└───────┬────────┘
+        │ region_id (0..12)
+        ▼
+┌────────────────────────┐
+│ Region Expert (id=k)   │  EfficientNet-B0 head → 2 sigmoid outputs
+└──────────┬─────────────┘
+           │ (norm_lat, norm_lon) ∈ [0,1]^2
+           ▼
+Denormalize via region bounding box → (latitude, longitude)
 ```
 
 ---
 
 ## Regions & Coordinate Normalization
 
-Each region k has:
+Each region k defines:
 - lat_min, lat_max
 - lon_min, lon_max
 
-Expert output (y_lat, y_lon) ∈ [0, 1]^2 is denormalized:
+Expert outputs y_lat, y_lon in [0,1]; convert:
 ```
 lat = y_lat * (lat_max - lat_min) + lat_min
 lon = y_lon * (lon_max - lon_min) + lon_min
 ```
 
----
-
-## Data
-
-- CSV includes at least: `filename`, `region_id` (other CSVs may contain `latitude`, `longitude`, `superRegion`).
-- CSV validation checks:
-  - Missing columns
-  - Label range (0–12)
-  - Missing files
-- Split: 90% train / 10% validation (fixed seed).
-- 13 region classes with imbalanced distribution (handled via weighting & sampling).
+Advantages:
+- Uniform learning scale across regions.
+- Avoids exploding coordinate variance across the globe.
+- Facilitates per-region error analysis.
 
 ---
 
-## Training
+## Data Pipeline
 
-### Director v3
-Design choices:
-- Input resolution: 224×224 (native EfficientNet‑B0 size).
-- Full fine‑tuning (all layers unfrozen).
-- Loss: `CrossEntropyLoss` with per-class weights.
-- Optimizer: `AdamW (lr=5e-4, weight_decay=1e-4)`.
-- Scheduler: `ReduceLROnPlateau (mode='min', factor=0.5, patience=3)`.
-- Early stopping: patience = 6 (monitors val_loss).
-- Augmentations (train):
-  - RandomResizedCrop(224, scale=(0.8,1.0), ratio=(1.0,1.0))
-  - RandomHorizontalFlip / RandomVerticalFlip
-  - ColorJitter (brightness, contrast, saturation, hue)
-  - RandomRotation (±20°)
-  - RandomGrayscale (p=0.08)
-  - Normalization (ImageNet)
-- Validation transform: CenterCrop or deterministic resize + normalization.
-- Balanced batches: WeightedRandomSampler + class weights in loss.
+(Ref. Notebooks 01–03)
 
-### Experts (Regressors)
-- Same backbone (EfficientNet‑B0).
-- Head: Linear → 2 + Sigmoid.
-- One model per region (trained with filtered dataset).
-- Loss typically MSE or Smooth L1 (depending on implementation).
-- Denormalization performed only at inference.
+1. Collection: Acquire raw images + metadata (filenames, region IDs, optional ground-truth coordinates).
+2. Validation:
+   - Check file existence.
+   - Validate label range (0–12 for 13 regions).
+   - Detect missing or malformed rows.
+3. Split:
+   - Train / Validation (90/10 stratified or random with fixed seed).
+4. Analysis:
+   - Class imbalance quantification.
+   - Spatial dispersion per region.
+   - Visual sanity checks (edge cases, ambiguous scenery).
+5. (Optional) Future additions:
+   - Hard example tagging (misclassified by Director).
+   - Geo-visual clustering for region refinement.
 
 ---
 
-## Inference
+## Modeling
 
-Steps:
-1. Load image → (optionally) center crop (e.g., 640×480) → resize 224×224 → normalize.
-2. Director predicts region_id (0–12).
-3. Load the corresponding region Expert.
-4. Expert outputs (norm_lat, norm_lon).
+### Director (Classification)
+
+- Backbone: EfficientNet-B0 (can be swapped later).
+- Input: 224×224 RGB (scaled & normalized).
+- Output: 13 logits → softmax.
+- Class imbalance mitigation:
+  - WeightedRandomSampler
+  - Per-class weight vector in CrossEntropyLoss
+
+### Experts (Conditional Regression)
+
+- One model per region (same backbone, lightweight head).
+- Head: Global pooling → Linear → 2 units → Sigmoid.
+- Loss: MSE / SmoothL1 on normalized coordinates.
+- Denormalization only at evaluation / inference.
+
+---
+
+## Training Setup
+
+Key configuration (Director v3 – Notebook 07):
+
+| Component | Choice |
+|-----------|--------|
+| Resolution | 224×224 |
+| Optimizer | AdamW (lr=5e-4, weight_decay=1e-4) |
+| Scheduler | ReduceLROnPlateau (factor 0.5, patience 3) |
+| Early Stopping | Patience 6 (val_loss) |
+| Loss | CrossEntropy (class weights) |
+| Augmentations | RandomResizedCrop, flips (H/V), Rotation (~±20°), ColorJitter, RandomGrayscale |
+| Normalization | ImageNet mean/std |
+| Checkpoint | Best val_loss |
+
+Potential improvements (see Roadmap): multi-metric checkpointing (accuracy + loss), label smoothing, MixUp / CutMix, partial freezing for speed, advanced backbones.
+
+---
+
+## Results (Director v3)
+
+Best (by val_loss): 1.3318  
+Peak validation accuracy reached later: 0.6397 (not saved under loss-only strategy).
+
+Classification Report (summary):
+- Strong classes: 5, 10, 11 (high precision & recall).
+- Weaker / confused: 3, 12, partial confusion among adjacent region pairs (geographic similarity).
+- Weighted F1 ≈ 0.64.
+
+(Full matrix & report reproduced in notebook 07.)
+
+Observations:
+- Some systematic confusions might justify region boundary refinement or hierarchical sub-classes.
+- Dual checkpointing (best_loss, best_accuracy) recommended to capture later accuracy gains.
+
+---
+
+## Inference Workflow
+
+(Ref. Notebook 06)
+
+1. Preprocess image (resize/crop → 224×224 → normalize).
+2. Director predicts region_id.
+3. Load corresponding Expert weights.
+4. Expert outputs normalized (lat, lon).
 5. Denormalize to real coordinates.
-6. (Optional) compute Haversine distance if ground truth is available.
-7. (Optional) produce Google Maps link: `https://www.google.com/maps?q=lat,lon`.
+6. (Optional) Compute Haversine distance if ground-truth available.
+7. Generate quick review link:
+   ```
+   https://www.google.com/maps?q=<lat>,<lon>
+   ```
+8. Aggregate metrics across a batch (mean distance, percentile thresholds).
 
 ---
 
 ## Repository Structure
 
-(Adjust to actual tree)
+(Representative – adjust as code evolves.)
 ```
 .
-├── data/
-│   ├── raw/
-│   │   └── images/
-│   └── metadata_final.csv
+├── notebooks/
+│   ├── 01_Data_Collecting.ipynb
+│   ├── 02_Data_Preprocessing.ipynb
+│   ├── 03_data_analysis_and_Imbalance_check.ipynb
+│   ├── 04_train_director.ipynb
+│   ├── 05_train_experts.ipynb
+│   ├── 06_inference_overview.ipynb
+│   └── 07_director_v3_training.ipynb
+├── src/
+│   ├── data/                  # (planned) dataset & transforms modules
+│   ├── models/                # (planned) director & expert definitions
+│   ├── training/              # training scripts / loops
+│   ├── inference/             # inference utilities / CLI
+│   └── utils/                 # metrics, logging, geo utils
 ├── saved_models/
 │   ├── director/
-│   │   └── efficientnet_b0_director_v2.pth
 │   └── experts/
-│       ├── expert_regressor_0.pth
-│       └── ...
-├── src/
-│   ├── training/
-│   │   ├── train_director.py
-│   │   └── train_expert.py
-│   └── inference/
-│       └── run_inference.py
-├── notebooks/
-│   ├── director_v3_training.ipynb
-│   └── inference_documentation.ipynb
-├── README.md          (Polish)
-├── README_en.md       (English)
-└── requirements.txt
+├── requirements.txt
+├── README.md
+└── LICENSE (pending choice: MIT / Apache-2.0)
 ```
 
----
-
-## Results & Metrics
-
-Best checkpoint saved by lowest validation loss:
-- Best val loss: 1.3318
-- Later val accuracy peaked at 0.6397 (loss-based early stopping did not update the checkpoint beyond best loss).
-
-### Classification Report
-
-```
-              precision    recall  f1-score   support
-0             0.7010      0.6194    0.6577    1298
-1             0.5291      0.5644    0.5462    1336
-2             0.5709      0.4495    0.5030     752
-3             0.3496      0.3482    0.3489     247
-4             0.4233      0.4858    0.4524     739
-5             0.7531      0.7494    0.7512    1225
-6             0.5157      0.5863    0.5487     365
-7             0.5820      0.6688    0.6224     939
-8             0.7591      0.6407    0.6949     551
-9             0.7919      0.6429    0.7096     882
-10            0.8173      0.8473    0.8320     491
-11            0.7250      0.8372    0.7771    1118
-12            0.5000      0.4211    0.4571      57
-
-accuracy                                0.6397   10000
-macro avg       0.6168      0.6047    0.6078   10000
-weighted avg    0.6460      0.6397    0.6399   10000
-```
-
-### Confusion Matrix
-
-Python code reproducing the matrix:
-
-```python
-import matplotlib.pyplot as plt
-import numpy as np
-
-cm = np.array([
-    [804, 87, 66, 20,102, 73, 21, 28, 0,13, 4,78, 2],
-    [ 60,754, 21, 26, 42, 39, 49,127,27,52,17,115, 7],
-    [ 66, 40,338, 26,152, 44, 24, 18, 3, 6, 4, 30, 1],
-    [  7, 37, 19, 86, 31,  6,  9,  9, 1, 3,15, 24, 0],
-    [ 64, 55, 67, 34,359, 95, 10, 18, 2, 5, 9, 18, 3],
-    [ 64, 47, 27,  5, 93,918,  6, 13, 5,13,14, 19, 1],
-    [  8, 33,  9,  7, 21,  1,214, 56, 5, 0, 2,  6, 3],
-    [  9,126,  7,  7, 19,  8, 55,628,41,23, 6,  8, 2],
-    [  1, 24,  3,  4,  6,  4,  9,130,353,11, 4,  2, 0],
-    [ 21,131,  8, 10,  9, 11,  1, 35, 17,567,16, 52, 4],
-    [  0, 17,  0,  4,  8, 12,  6,  4,  5, 16,416,  3, 0],
-    [ 43, 57, 26, 14,  6,  8, 10,  9,  2,  4,  2,936, 1],
-    [  0, 17,  1,  3,  0,  0,  1,  4,  4,  3,  0,  0,24],
-])
-
-fig, ax = plt.subplots(figsize=(12,10))
-im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-ax.figure.colorbar(im, ax=ax)
-ax.set(
-    xticks=np.arange(cm.shape[1]),
-    yticks=np.arange(cm.shape[0]),
-    xticklabels=np.arange(13),
-    yticklabels=np.arange(13),
-    title="Confusion Matrix",
-    ylabel="True label",
-    xlabel="Predicted label"
-)
-plt.xticks(rotation=45)
-thresh = cm.max() / 2
-for i in range(cm.shape[0]):
-    for j in range(cm.shape[1]):
-        ax.text(j, i, str(cm[i, j]),
-                ha='center', va='center',
-                color='white' if cm[i, j] > thresh else 'black')
-plt.tight_layout()
-plt.show()
-```
-
----
-
-## How to Run
-
-### Requirements
-- Python 3.10+
-- GPU (CUDA recommended)
-- Packages: `torch`, `torchvision`, `efficientnet_pytorch`, `pandas`, `tqdm`, `scikit-learn`, `matplotlib`, `Pillow`, `numpy`
-
-### Installation
-
-```bash
-git clone https://github.com/<your_org_or_user>/geomind.git
-cd geomind
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Example Commands
-
-Train Director:
-```bash
-python src/training/train_director.py
-```
-
-Run inference over a folder:
-```bash
-python src/inference/run_inference.py \
-  --images_dir data/raw/images \
-  --csv metadata_inference.csv \
-  --director_path saved_models/director/efficientnet_b0_director_v2.pth \
-  --experts_dir saved_models/experts/
-```
-
-(Adjust arguments to your actual script interface.)
-
----
-
-## Roadmap / Potential Improvements
-
-| Area | Idea |
-|------|------|
-| Checkpointing | Separate best-by-loss & best-by-accuracy saves |
-| Loss | Label smoothing / Focal Loss |
-| Augmentations | MixUp / CutMix |
-| Backbone | EfficientNet‑V2 / ConvNeXt / ViT |
-| Ensemble | Multiple Directors + voting / logit averaging |
-| Experts | Joint multi-head model / uncertainty output |
-| Calibration | Temperature scaling of softmax |
-| Performance | AMP (mixed precision) |
-| Interpretability | Grad-CAM visualizations |
-| Deployment | ONNX / TorchScript export |
-| Sampling | Hard example mining from confusion matrix |
-
----
-
-## FAQ
-
-**Why a two-stage approach?**  
-It decomposes a multi-modal global regression into simpler conditional regressions.
-
-**Why 224×224?**  
-Native size for EfficientNet‑B0, fast and sufficiently expressive.
-
-**Why Sigmoid in experts?**  
-To constrain outputs to [0,1] so denormalization is stable.
-
-**Can more regions be added?**  
-Yes: update region definitions, bounding boxes, retrain Director & new Experts.
-
-**Why did accuracy improve while loss did not?**  
-CrossEntropy can plateau or worsen slightly while accuracy still fluctuates. Consider dual checkpoint metrics if accuracy is critical.
+Suggested next refactors:
+- Move repeated notebook code → `src/`.
+- Provide a CLI entry (e.g. `python -m geomind.inference ...`).
 
 ---
 
 ## License
 
-```
-MIT License
+(Choose one—placeholder below.)
 
-Copyright (c) 2025 gulis-dev, piotr-kaptur
+Example (MIT):
 ```
+This project is licensed under the MIT License.
+
+```
+
+---
+
+## Quick Start Snippet
+
+```bash
+# Install
+git clone https://github.com/<your-user-or-org>/GeoMind.git
+cd GeoMind
+pip install -r requirements.txt
+
+# (Optional) Train director
+python src/training/train_director.py --config configs/director_v3.yaml
+
+# Inference (example)
+python src/inference/run_inference.py \
+    --images_dir data/raw/images \
+    --director_path saved_models/director/director_v3_best.pt \
+    --experts_dir saved_models/experts \
+    --output predictions.csv
+```
+
+---
+
+## Disclaimer
+
+This system produces approximate geolocations and may be wrong or biased. Do not use for safety‑critical, surveillance, or privacy‑sensitive applications without thorough validation and ethical review.
+
+---
+
+Feel free to open issues / PRs for improvements, benchmarking results, or integration ideas. Contributions welcome!
