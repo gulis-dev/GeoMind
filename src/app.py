@@ -152,6 +152,10 @@ if uploaded_file is not None:
 
                 if region_id is not None and coords is not None:
                     lat, lon = coords
+
+                    lat = float(lat)
+                    lon = float(lon)
+
                     st.subheader(f"Predicted Region: {region_id}")
                     st.subheader(f"Coordinates: ({lat:.4f}, {lon:.4f})")
 
