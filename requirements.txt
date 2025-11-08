@@ -3,3 +3,4 @@ pandas
 torch
 torchvision
 Pillow
+efficientnet_pytorch
