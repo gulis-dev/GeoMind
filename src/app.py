@@ -55,7 +55,7 @@ def denormalize_coords(norm_lat, norm_lon, region_id):
 @st.cache_resource
 def load_models():
     director_path = "saved_models/director/efficientnet_b0_director_v3.pth"
-    experts_dir = "saved_models/experts"
+    experts_dir = "saved_models/experts/v2"
 
     if not os.path.exists(director_path):
         st.error(f"Director model not found at {director_path}")
