@@ -54,7 +54,7 @@ def denormalize_coords(norm_lat, norm_lon, region_id):
 
 @st.cache_resource
 def load_models():
-    director_path = "saved_models/director/director_v3_best.pt"
+    director_path = "saved_models/director/efficientnet_b0_director_v3.pth"
     experts_dir = "saved_models/experts"
 
     if not os.path.exists(director_path):
@@ -70,7 +70,7 @@ def load_models():
 
     expert_models = {}
     for i in range(13):
-        expert_path = os.path.join(experts_dir, f"expert_region_{i}.pt")
+        expert_path = os.path.join(experts_dir, f"expert_regressor_{i}.pth")
         if not os.path.exists(expert_path):
             st.warning(f"Missing expert model for region {i} at {expert_path}")
             continue
