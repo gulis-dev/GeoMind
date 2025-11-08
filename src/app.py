@@ -4,51 +4,84 @@ import torch
 import torchvision.transforms as T
 import pandas as pd
 import os
+from efficientnet_pytorch import EfficientNet
+import math
 
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-class DirectorModel(torch.nn.Module):
-    def __init__(self): super().__init__(); self.fc = torch.nn.Linear(10, 13)
-
-    def forward(self, x): return self.fc(torch.randn(x.size(0), 10))
-
-
-class ExpertModel(torch.nn.Module):
-    def __init__(self): super().__init__(); self.fc = torch.nn.Linear(10, 2)
-
-    def forward(self, x): return self.fc(torch.randn(x.size(0), 10))
-
-
-REGION_BOUNDING_BOXES = {
-    0: {"lat_min": 40.0, "lat_max": 50.0, "lon_min": 10.0, "lon_max": 20.0},
-    1: {"lat_min": 45.0, "lat_max": 55.0, "lon_min": 20.0, "lon_max": 30.0},
-    2: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    3: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    4: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    5: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    6: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    7: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    8: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    9: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    10: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    11: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0},
-    12: {"lat_min": 0.0, "lat_max": 0.0, "lon_min": 0.0, "lon_max": 0.0}
+REGION_PARAMS = {
+    0: {'lat_min': 15.0, 'lat_max': 70.0, 'lon_min': -168.0, 'lon_max': -52.0},
+    1: {'lat_min': -56.0, 'lat_max': 33.0, 'lon_min': -118.0, 'lon_max': -34.0},
+    2: {'lat_min': 36.0, 'lat_max': 71.0, 'lon_min': -25.0, 'lon_max': 40.0},
+    3: {'lat_min': 34.0, 'lat_max': 47.0, 'lon_min': -10.0, 'lon_max': 28.0},
+    4: {'lat_min': 41.0, 'lat_max': 60.0, 'lon_min': 12.0, 'lon_max': 41.0},
+    5: {'lat_min': 41.0, 'lat_max': 82.0, 'lon_min': 19.0, 'lon_max': 180.0},
+    6: {'lat_min': 20.0, 'lat_max': 46.0, 'lon_min': 122.0, 'lon_max': 153.0},
+    7: {'lat_min': -11.0, 'lat_max': 23.0, 'lon_min': 95.0, 'lon_max': 155.0},
+    8: {'lat_min': 5.0, 'lat_max': 37.0, 'lon_min': 60.0, 'lon_max': 97.0},
+    9: {'lat_min': -35.0, 'lat_max': 37.0, 'lon_min': -18.0, 'lon_max': 52.0},
+    10: {'lat_min': 12.0, 'lat_max': 34.0, 'lon_min': 33.0, 'lon_max': 60.0},
+    11: {'lat_min': -47.0, 'lat_max': -9.0, 'lon_min': 112.0, 'lon_max': 180.0},
+    12: {'lat_min': -50.0, 'lat_max': 80.0, 'lon_min': -180.0, 'lon_max': 180.0},
 }
 
-preprocess_transform = T.Compose([
-    T.Resize((224, 224)),
-    T.ToTensor(),
-    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+
+def crop_center_640x480(image: Image.Image) -> Image.Image:
+    w, h = image.size
+    cw, ch = 640, 480
+    if w < cw or h < ch:
+        st.warning(f"Image is smaller than 640x480 ({w}x{h}). Resizing...")
+        image = image.resize((cw, ch), Image.LANCZOS)
+
+    w, h = image.size
+    left = (w - cw) // 2
+    top = (h - ch) // 2
+    right = left + cw
+    bottom = top + ch
+    return image.crop((left, top, right, bottom))
 
 
-def denormalize_coords(norm_lat, norm_lon, region_id):
-    if region_id not in REGION_BOUNDING_BOXES:
-        raise ValueError("Invalid region ID")
+def preprocess_image(image: Image.Image):
+    image = image.convert("RGB")
+    image = crop_center_640x480(image)
+    transform = T.Compose([
+        T.Resize((224, 224)),
+        T.ToTensor(),
+        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    return transform(image).unsqueeze(0)
 
-    bbox = REGION_BOUNDING_BOXES[region_id]
 
-    lat = norm_lat * (bbox['lat_max'] - bbox['lat_min']) + bbox['lat_min']
-    lon = norm_lon * (bbox['lon_max'] - bbox['lon_min']) + bbox['lon_min']
+def load_director(director_path, device=DEVICE):
+    model = EfficientNet.from_name('efficientnet-b0')
+    model._fc = torch.nn.Linear(model._fc.in_features, len(REGION_PARAMS))
+    model.load_state_dict(torch.load(director_path, map_location=device))
+    model.to(device)
+    model.eval()
+    return model
+
+
+def load_expert(region_id, experts_dir, device=DEVICE):
+    model = EfficientNet.from_name('efficientnet-b0')
+    model._fc = torch.nn.Sequential(
+        torch.nn.Linear(model._fc.in_features, 2),
+        torch.nn.Sigmoid()
+    )
+    weights_path = f'{experts_dir}/expert_regressor_{region_id}.pth'
+    if not os.path.exists(weights_path):
+        st.error(f"Missing expert model file at: {weights_path}")
+        return None
+
+    model.load_state_dict(torch.load(weights_path, map_location=device))
+    model.to(device)
+    model.eval()
+    return model
+
+
+def denormalize(pred, region_id):
+    region_params = REGION_PARAMS[region_id]
+    lat = pred[0] * (region_params['lat_max'] - region_params['lat_min']) + region_params['lat_min']
+    lon = pred[1] * (region_params['lon_max'] - region_params['lon_min']) + region_params['lon_min']
     return lat, lon
 
 
@@ -64,21 +97,13 @@ def load_models():
         st.error(f"Experts directory not found at {experts_dir}")
         return None, None
 
-    director_model = DirectorModel()
-    # director_model.load_state_dict(torch.load(director_path, map_location="cpu"))
-    # director_model.eval()
+    director_model = load_director(director_path, DEVICE)
 
     expert_models = {}
-    for i in range(13):
-        expert_path = os.path.join(experts_dir, f"expert_regressor_{i}.pth")
-        if not os.path.exists(expert_path):
-            st.warning(f"Missing expert model for region {i} at {expert_path}")
-            continue
-
-        expert = ExpertModel()
-        # expert.load_state_dict(torch.load(expert_path, map_location="cpu"))
-        # expert.eval()
-        expert_models[i] = expert
+    for i in range(len(REGION_PARAMS)):
+        expert = load_expert(i, experts_dir, DEVICE)
+        if expert is not None:
+            expert_models[i] = expert
 
     return director_model, expert_models
 
@@ -86,12 +111,12 @@ def load_models():
 director_model, expert_models = load_models()
 
 
-def run_inference(image):
-    tensor = preprocess_transform(image).unsqueeze(0)
+def run_inference(image: Image.Image):
+    tensor = preprocess_image(image).to(DEVICE)
 
     with torch.no_grad():
         director_logits = director_model(tensor)
-        region_id = torch.argmax(director_logits, dim=1).item()
+        region_id = director_logits.argmax(dim=1).item()
 
     if region_id not in expert_models:
         st.error(f"Region {region_id} detected, but missing expert model file.")
@@ -100,11 +125,9 @@ def run_inference(image):
     expert_model = expert_models[region_id]
 
     with torch.no_grad():
-        norm_coords = expert_model(tensor)
-        norm_lat = norm_coords[0][0].item()
-        norm_lon = norm_coords[0][1].item()
+        pred_exp = expert_model(tensor).cpu().numpy()[0]
 
-    lat, lon = denormalize_coords(norm_lat, norm_lon, region_id)
+    lat, lon = denormalize(pred_exp, region_id)
 
     return region_id, (lat, lon)
 
@@ -135,7 +158,7 @@ if uploaded_file is not None:
                     map_data = pd.DataFrame({'lat': [lat], 'lon': [lon]})
                     st.map(map_data, zoom=4)
 
-                    gmaps_link = f"https://www.google.com/maps?q={lat},{lon}"
+                    gmaps_link = f"https.www.google.com/maps?q={lat},{lon}"
                     st.link_button("Open in Google Maps", gmaps_link)
 
 st.sidebar.header("About This Project")
